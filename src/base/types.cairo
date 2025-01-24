@@ -1,5 +1,3 @@
-use core::serde::Serde;
-use core::option::OptionTrait;
 use core::starknet::ContractAddress;
 
 #[derive(Drop, Serde, starknet::Store, Clone)]
@@ -25,5 +23,5 @@ pub struct CertificationDetails {
 #[derive(Debug, Drop, Serde, starknet::Store, Clone, PartialEq)]
 pub enum ResourceType {
     Free,
-    Paid
+    Paid,
 }
