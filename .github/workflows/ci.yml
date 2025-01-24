@@ -1,0 +1,30 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install Scarb
+        run: |
+          curl -L https://github.com/software-mansion/scarb/releases/download/v0.7.0/scarb-v0.7.0-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          sudo mv scarb /usr/local/bin/
+
+      - name: Build contracts
+        run: |
+          scarb build
+
+      - name: Run tests
+        run: |
+          scarb test
