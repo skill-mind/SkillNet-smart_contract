@@ -23,9 +23,15 @@ jobs:
 
       - name: Install snforge
         run: |
-          curl -L https://github.com/software-mansion/snforge/releases/download/v0.2.0/snforge-v0.2.0-linux-x86_64.tar.gz | tar xz
+          # Download the snforge tarball
+          curl -L https://github.com/software-mansion/snforge/releases/download/v0.2.0/snforge-v0.2.0-linux-x86_64.tar.gz -o snforge.tar.gz
+          
+          tar -xzvf snforge.tar.gz
+          
           sudo mv snforge /usr/local/bin/
           sudo chmod +x /usr/local/bin/snforge
+          
+          snforge --version
 
       - name: Run Scarb Build
         run: |
