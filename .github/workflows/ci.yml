@@ -9,18 +9,12 @@ on:
       - main
 
 jobs:
-  build-and-test:
+  check:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Set up Scarb
-        uses: software-mansion/setup-scarb@v1
+      - uses: actions/checkout@v4
+      - uses: software-mansion/setup-scarb@v1
         with:
-          scarb-version: "2.9.1" 
-
-      - name: Run Scarb Test
-        run: |
-          scarb test
+          scarb-version: "2.9.1"
+      - run: scarb fmt --check
+      - run: scarb test
