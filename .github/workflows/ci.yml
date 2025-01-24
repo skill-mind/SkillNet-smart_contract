@@ -19,7 +19,13 @@ jobs:
       - name: Set up Scarb
         uses: software-mansion/setup-scarb@v1
         with:
-          scarb-version: "latest"  
+          scarb-version: "latest" 
+
+      - name: Install snforge
+        run: |
+          curl -L https://github.com/software-mansion/snforge/releases/download/v0.2.0/snforge-v0.2.0-linux-x86_64.tar.gz | tar xz
+          sudo mv snforge /usr/local/bin/
+          sudo chmod +x /usr/local/bin/snforge
 
       - name: Run Scarb Build
         run: |
