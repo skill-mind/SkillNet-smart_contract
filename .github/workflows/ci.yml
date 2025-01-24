@@ -16,18 +16,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Install Scarb
-        run: |
-          curl -L https://github.com/software-mansion/scarb/releases/download/v0.7.0/scarb-v0.7.0-x86_64-unknown-linux-gnu.tar.gz | tar xz
-          ls -l  # Debug: List files after extraction to find the scarb binary
-          sudo mv scarb-v0.7.0-x86_64-unknown-linux-gnu/scarb /usr/local/bin/
-          sudo chmod +x /usr/local/bin/scarb
-          scarb --version  # Ensure it installed correctly
+      - name: Set up Scarb
+        uses: software-mansion/setup-scarb@v1
+        with:
+          scarb-version: "latest"  
 
-      - name: Build contracts
+      - name: Run Scarb Build
         run: |
           scarb build
 
-      - name: Run tests
+      - name: Run Scarb Tests
         run: |
           scarb test
