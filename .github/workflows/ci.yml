@@ -12,12 +12,13 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
       - uses: software-mansion/setup-scarb@v1
         with:
           scarb-version: "2.9.1"
-      - uses: foundry-rs/setup-snfoundry@v1
+      - uses: foundry-rs/setup-snfoundry@v3
         with:
           starknet-foundry-version: "0.32.0" 
+      - run: snforge -V  # Check the version of snforge
       - run: scarb fmt --check
       - run: scarb test
