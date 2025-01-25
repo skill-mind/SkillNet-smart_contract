@@ -47,7 +47,7 @@ fn test_create_should_emit_event_on_success() {
     let mut spy = spy_events();
     skillnet_dispatcher.create_course("BaseCamp 11", 0);
     let expected_event = SkillNet::Event::NewCourseCreated(
-        SkillNet::NewCourseCreated { course_id: 1, name: "BaseCamp 11", instructor: instructor },
+        SkillNet::NewCourseCreated { course_id: 100, name: "BaseCamp 11", instructor: instructor },
     );
     spy.assert_emitted(@array![(skillnet_contract_address, expected_event)]);
     stop_cheat_caller_address(skillnet_contract_address);
