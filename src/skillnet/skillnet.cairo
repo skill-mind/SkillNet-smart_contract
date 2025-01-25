@@ -13,8 +13,12 @@ pub mod SkillNet {
     #[storage]
     struct Storage {
         courses_count: u256,
+        certifications_count: u256,
         course_details: Map<u256, CourseDetails>, // map(course_id, CourseDetails)
-        course_instructors: Map<u256, ContractAddress> // map(course_id, CourseInstructor)
+        course_instructors: Map<u256, ContractAddress>, // map(course_id, CourseInstructor)
+        certification_details: Map<
+            u256, CertificationDetails,
+        > // map(certification_id, CertificationDetails)
     }
 
     /// @notice Events emitted by the contract
@@ -64,6 +68,7 @@ pub mod SkillNet {
     #[constructor]
     fn constructor(ref self: ContractState) {
         self.courses_count.write(0);
+        self.certifications_count.write(0);
     }
 
     #[abi(embed_v0)]
@@ -92,8 +97,24 @@ pub mod SkillNet {
             self: @ContractState, course_id: u256, student: ContractAddress,
         ) {}
 
+        /// @notice Creates a new Certification
+        /// @param name Name of Certification
+        /// @param fee Certification fee
+        /// @return sertification_id The ID of the newly created event
         fn create_certification(ref self: ContractState, name: ByteArray, fee: u256) -> u256 {
-            0
+            let institution = get_caller_address();
+            let cert_name = name.clone();
+            let certification_id = self._create_certification(name, fee, institution);
+
+            self
+                .emit(
+                    NewCertificationCreated {
+                        name: cert_name,
+                        certification_id: certification_id,
+                        institution: institution,
+                    },
+                );
+            certification_id
         }
 
         fn enroll_for_certification(ref self: ContractState, certificate_id: u256, fee: u256) {}
@@ -139,6 +160,36 @@ pub mod SkillNet {
             self.course_instructors.write(course_id, instructor);
 
             course_id
+        }
+
+        /// @notice create certification
+        /// @param name: Name of certification
+        /// @param course_fee: Certification enrollment fee.
+        /// @param institution: Institution hosting the certification.
+        /// @return ID of the created certification.
+        fn _create_certification(
+            ref self: ContractState, name: ByteArray, fee: u256, institution: ContractAddress,
+        ) -> u256 {
+            let certification_id = self.certifications_count.read() + 1;
+            self.certifications_count.write(certification_id);
+
+            let certificate_type = match fee > 0 {
+                true => ResourceType::Paid,
+                false => ResourceType::Free,
+            };
+
+            let certification_details = CertificationDetails {
+                certification_id,
+                name,
+                institution,
+                total_enrolled: 0,
+                certificate_type,
+                enroll_fee: fee,
+            };
+
+            self.certification_details.write(certification_id, certification_details);
+
+            certification_id
         }
     }
 }

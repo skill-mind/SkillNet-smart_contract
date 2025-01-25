@@ -52,3 +52,22 @@ fn test_create_should_emit_event_on_success() {
     spy.assert_emitted(@array![(skillnet_contract_address, expected_event)]);
     stop_cheat_caller_address(skillnet_contract_address);
 }
+
+#[test]
+fn test_create_certification_success() {
+    let skillnet_contract_address = __setup__();
+    let skillnet_dispatcher = ISkillNetDispatcher { contract_address: skillnet_contract_address };
+    let caller: ContractAddress = BARRETO.try_into().unwrap();
+
+    start_cheat_caller_address(skillnet_contract_address, caller);
+    let mut spy = spy_events();
+    let certification_id = skillnet_dispatcher.create_certification("BaseCamp 11", 0);
+    assert(certification_id == 1, 'Certification not created');
+    let expected_event = SkillNet::Event::NewCertificationCreated(
+        SkillNet::NewCertificationCreated {
+            certification_id: 1, name: "BaseCamp 11", institution: caller,
+        },
+    );
+    spy.assert_emitted(@array![(skillnet_contract_address, expected_event)]);
+    stop_cheat_caller_address(skillnet_contract_address);
+}
