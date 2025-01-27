@@ -89,24 +89,22 @@ pub mod SkillNet {
             course_id
         }
 
-        fn enroll_for_course(ref self: ContractState, course_id: u256, fee: u256) {
-            // Get course details and verify course exists
+        fn enroll_for_course(ref self: ContractState, course_id: u256, balance: u256) {
+            /// @dev Get course details and verify course exists
             let course = self.course_details.read(course_id);
             assert(course.course_id == course_id, 'Course does not exist');
+            assert(balance >= course.enroll_fee, 'Insufficient balance');
 
-            // Verify correct fee is provided
-            assert(course.enroll_fee == fee, 'Incorrect fee amount');
-
-            // Get student address
+            /// @dev Get student address
             let student = get_caller_address();
 
-            // Update total enrolled count
+            /// @dev Update total enrolled count
             let new_total = course.total_enrolled + 1;
             let course_name = course.name.clone();
             let updated_course = CourseDetails { total_enrolled: new_total, ..course };
             self.course_details.write(course_id, updated_course);
 
-            // Emit enrollment event
+            /// @dev Emit enrollment event
             self.emit(EnrolledForCourse { course_id, course_name, student_address: student });
         }
 
