@@ -89,7 +89,35 @@ pub mod SkillNet {
             course_id
         }
 
-        fn enroll_for_course(ref self: ContractState, course_id: u256, fee: u256) {}
+        fn enroll_for_course(ref self: ContractState, course_id: u256, fee: u256) {
+            // Get course details and verify course exists
+            let course = self.course_details.read(course_id);
+            assert(course.course_id == course_id, 'Course does not exist');
+            
+            // Verify correct fee is provided
+            assert(course.enroll_fee == fee, 'Incorrect fee amount');
+            
+            // Get student address
+            let student = get_caller_address();
+            
+            // Update total enrolled count
+            let new_total = course.total_enrolled + 1;
+            let course_name = course.name.clone();
+            let updated_course = CourseDetails {
+                total_enrolled: new_total,
+                ..course
+            };
+            self.course_details.write(course_id, updated_course);
+            
+            // Emit enrollment event
+            self.emit(
+                EnrolledForCourse { 
+                    course_id, 
+                    course_name, 
+                    student_address: student 
+                }
+            );
+        }
 
         fn mint_course_certificate(ref self: ContractState, course_id: u256) {}
 
