@@ -9,6 +9,7 @@ pub mod SkillNet {
     };
     use contract::base::types::{CourseDetails, CertificationDetails, ResourceType};
     use contract::interfaces::ISkillNet::ISkillNet;
+    use contract::interfaces::IErc20::{IERC20DispatcherTrait, IERC20Dispatcher};
     /// @notice Contract storage structure
     #[storage]
     struct Storage {
@@ -18,7 +19,8 @@ pub mod SkillNet {
         course_instructors: Map<u256, ContractAddress>, // map(course_id, CourseInstructor)
         certification_details: Map<
             u256, CertificationDetails,
-        > // map(certification_id, CertificationDetails)
+        >, // map(certification_id, CertificationDetails)
+        token_address: ContractAddress,
     }
 
     /// @notice Events emitted by the contract
@@ -89,7 +91,31 @@ pub mod SkillNet {
             course_id
         }
 
-        fn enroll_for_course(ref self: ContractState, course_id: u256, fee: u256) {}
+        fn enroll_for_course(ref self: ContractState, course_id: u256, balance: u256) {
+            /// @dev Get course details and verify course exists
+            let course = self.course_details.read(course_id);
+            assert(course.course_id == course_id, 'Course does not exist');
+            assert(balance >= course.enroll_fee, 'Insufficient balance');
+
+            /// @dev Get student and instructor addresses
+            let student = get_caller_address();
+            let instructor = course.instructor;
+
+            let token = self.token_address.read();
+
+            /// @dev Execute payment transfer
+            let erc20 = IERC20Dispatcher { contract_address: token };
+            erc20.transfer_from(student, instructor, course.enroll_fee.try_into().unwrap());
+
+            /// @dev Update total enrolled count
+            let new_total = course.total_enrolled + 1;
+            let course_name = course.name.clone();
+            let updated_course = CourseDetails { total_enrolled: new_total, ..course };
+            self.course_details.write(course_id, updated_course);
+
+            /// @dev Emit enrollment event
+            self.emit(EnrolledForCourse { course_id, course_name, student_address: student });
+        }
 
         fn mint_course_certificate(ref self: ContractState, course_id: u256) {}
 
