@@ -9,6 +9,8 @@ pub mod SkillNet {
     };
     use contract::base::types::{CourseDetails, CertificationDetails, ResourceType};
     use contract::interfaces::ISkillNet::ISkillNet;
+    use contract::interfaces::IErc20::{IERC20DispatcherTrait, IERC20Dispatcher};
+
     /// @notice Contract storage structure
     #[storage]
     struct Storage {
@@ -18,7 +20,8 @@ pub mod SkillNet {
         course_instructors: Map<u256, ContractAddress>, // map(course_id, CourseInstructor)
         certification_details: Map<
             u256, CertificationDetails,
-        > // map(certification_id, CertificationDetails)
+        >, // map(certification_id, CertificationDetails)
+        token_address: ContractAddress,
     }
 
     /// @notice Events emitted by the contract
@@ -66,9 +69,10 @@ pub mod SkillNet {
     /// @notice Initializes the Events contract
     /// @dev Sets the initial event count to 0
     #[constructor]
-    fn constructor(ref self: ContractState) {
+    fn constructor(ref self: ContractState, token_address: ContractAddress) {
         self.courses_count.write(0);
         self.certifications_count.write(0);
+        self.token_address.write(token_address);
     }
 
     #[abi(embed_v0)]
@@ -89,7 +93,33 @@ pub mod SkillNet {
             course_id
         }
 
-        fn enroll_for_course(ref self: ContractState, course_id: u256, fee: u256) {}
+        fn enroll_for_course(ref self: ContractState, course_id: u256) {
+            // Get course details and verify course exists
+            let course = self.course_details.read(course_id);
+            assert(course.course_id == course_id, 'Course does not exist');
+
+            // Get student and instructor addresses
+            let student = get_caller_address();
+            let instructor = course.instructor;
+
+            let token = self.token_address.read();
+            let erc20 = IERC20Dispatcher { contract_address: token };
+
+            // Check user's balance
+            let user_balance = erc20.balance_of(student).into();
+            assert(user_balance >= course.enroll_fee, 'Insufficient balance');
+
+            // Execute payment transfer
+            erc20.transfer_from(student, instructor, course.enroll_fee.try_into().unwrap());
+
+            // Update total enrolled count
+            let new_total = course.total_enrolled + 1;
+            let course_name = course.name.clone();
+            let updated_course = CourseDetails { total_enrolled: new_total, ..course };
+            self.course_details.write(course_id, updated_course);
+
+            self.emit(EnrolledForCourse { course_id, course_name, student_address: student });
+        }
 
         fn mint_course_certificate(ref self: ContractState, course_id: u256) {}
 
