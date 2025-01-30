@@ -6,7 +6,11 @@ use snforge_std::{
     DeclareResultTrait, EventSpyAssertionsTrait,
 };
 use contract::interfaces::ISkillNet::{ISkillNetDispatcher, ISkillNetDispatcherTrait};
+use contract::interfaces::IErc20::{IERC20Dispatcher, IERC20DispatcherTrait};
+
+
 use contract::skillnet::skillnet::SkillNet;
+use contract::skillnet::ERC20::erc20;
 
 const BARRETO: felt252 = 'BARRETO';
 const WESCOT: felt252 = 'WESCOT';
@@ -14,21 +18,30 @@ const WESCOT: felt252 = 'WESCOT';
 // *************************************************************************
 //                              SETUP
 // *************************************************************************
-fn __setup__() -> ContractAddress {
-    // deploy skillnet
+fn __setup__() -> (ContractAddress, ContractAddress) {
+    // Deploy ERC20 first
+    let erc20_class_hash = declare("erc20").unwrap().contract_class();
+    let erc20_constructor_calldata = array![
+        WESCOT.try_into().unwrap(), // recipient
+        'Test Token', // name
+        8, // decimals
+        1000000, // initial_supply
+        'TT' // symbol
+    ];
+    let (erc20_contract_address, _) = erc20_class_hash.deploy(@erc20_constructor_calldata).unwrap();
+
+    // Deploy SkillNet with token address
     let skillnet_class_hash = declare("SkillNet").unwrap().contract_class();
+    let constructor_calldata = array![erc20_contract_address.into()];
+    let (skillnet_contract_address, _) = skillnet_class_hash.deploy(@constructor_calldata).unwrap();
 
-    let mut events_constructor_calldata: Array<felt252> = array![];
-    let (skillnet_contract_address, _) = skillnet_class_hash
-        .deploy(@events_constructor_calldata)
-        .unwrap();
-
-    skillnet_contract_address
+    (skillnet_contract_address, erc20_contract_address)
 }
+
 
 #[test]
 fn test_create_course() {
-    let skillnet_contract_address = __setup__();
+    let (skillnet_contract_address, _) = __setup__();
     let skillnet_dispatcher = ISkillNetDispatcher { contract_address: skillnet_contract_address };
 
     start_cheat_caller_address(skillnet_contract_address, BARRETO.try_into().unwrap());
@@ -39,7 +52,7 @@ fn test_create_course() {
 
 #[test]
 fn test_create_should_emit_event_on_success() {
-    let skillnet_contract_address = __setup__();
+    let (skillnet_contract_address, _) = __setup__();
     let skillnet_dispatcher = ISkillNetDispatcher { contract_address: skillnet_contract_address };
 
     let instructor: ContractAddress = BARRETO.try_into().unwrap();
@@ -55,7 +68,7 @@ fn test_create_should_emit_event_on_success() {
 
 #[test]
 fn test_create_certification_success() {
-    let skillnet_contract_address = __setup__();
+    let (skillnet_contract_address, _) = __setup__();
     let skillnet_dispatcher = ISkillNetDispatcher { contract_address: skillnet_contract_address };
     let caller: ContractAddress = BARRETO.try_into().unwrap();
 
@@ -66,6 +79,39 @@ fn test_create_certification_success() {
     let expected_event = SkillNet::Event::NewCertificationCreated(
         SkillNet::NewCertificationCreated {
             certification_id: 1, name: "BaseCamp 11", institution: caller,
+        },
+    );
+    spy.assert_emitted(@array![(skillnet_contract_address, expected_event)]);
+    stop_cheat_caller_address(skillnet_contract_address);
+}
+
+#[test]
+fn test_enroll_for_course() {
+    let (skillnet_contract_address, erc20_contract_address) = __setup__();
+    let skillnet_dispatcher = ISkillNetDispatcher { contract_address: skillnet_contract_address };
+    let erc20_dispatcher = IERC20Dispatcher { contract_address: erc20_contract_address };
+
+    // Create a course first
+    let instructor: ContractAddress = BARRETO.try_into().unwrap();
+    let student: ContractAddress = WESCOT.try_into().unwrap();
+
+    // Create course with fee
+    start_cheat_caller_address(skillnet_contract_address, instructor);
+    let course_id = skillnet_dispatcher.create_course("BaseCamp 11", 100);
+    stop_cheat_caller_address(skillnet_contract_address);
+
+    // Approve token spending before enrollment
+    start_cheat_caller_address(skillnet_contract_address, student);
+    erc20_dispatcher.approve(skillnet_contract_address, 100);
+
+    // Enroll in course
+    let mut spy = spy_events();
+    skillnet_dispatcher.enroll_for_course(course_id);
+
+    // Verify enrollment event
+    let expected_event = SkillNet::Event::EnrolledForCourse(
+        SkillNet::EnrolledForCourse {
+            course_id, course_name: "BaseCamp 11", student_address: student,
         },
     );
     spy.assert_emitted(@array![(skillnet_contract_address, expected_event)]);

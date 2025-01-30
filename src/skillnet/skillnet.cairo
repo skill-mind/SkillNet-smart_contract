@@ -10,6 +10,7 @@ pub mod SkillNet {
     use contract::base::types::{CourseDetails, CertificationDetails, ResourceType};
     use contract::interfaces::ISkillNet::ISkillNet;
     use contract::interfaces::IErc20::{IERC20DispatcherTrait, IERC20Dispatcher};
+
     /// @notice Contract storage structure
     #[storage]
     struct Storage {
@@ -68,9 +69,10 @@ pub mod SkillNet {
     /// @notice Initializes the Events contract
     /// @dev Sets the initial event count to 0
     #[constructor]
-    fn constructor(ref self: ContractState) {
+    fn constructor(ref self: ContractState, token_address: ContractAddress) {
         self.courses_count.write(0);
         self.certifications_count.write(0);
+        self.token_address.write(token_address);
     }
 
     #[abi(embed_v0)]
