@@ -7,41 +7,70 @@ use snforge_std::{
 };
 use contract::interfaces::ISkillNet::{ISkillNetDispatcher, ISkillNetDispatcherTrait};
 use contract::interfaces::IErc20::{IERC20Dispatcher, IERC20DispatcherTrait};
+use contract::interfaces::IErc721::{IERC721Dispatcher, IERC721DispatcherTrait};
 
 
 use contract::skillnet::skillnet::SkillNet;
 use contract::skillnet::ERC20::erc20;
+use contract::skillnet::ERC721::erc721;
 
 const BARRETO: felt252 = 'BARRETO';
 const WESCOT: felt252 = 'WESCOT';
+const ADMIN: felt252 = 'ADMIN';
+
+fn OWNER() -> ContractAddress {
+    'owner'.try_into().unwrap()
+}
+
+fn USER() -> ContractAddress {
+    WESCOT.try_into().unwrap()
+}
 
 // *************************************************************************
 //                              SETUP
 // *************************************************************************
-fn __setup__() -> (ContractAddress, ContractAddress) {
-    // Deploy ERC20 first
+fn __setup__() -> (ContractAddress, ContractAddress, ContractAddress) {
     let erc20_class_hash = declare("erc20").unwrap().contract_class();
-    let erc20_constructor_calldata = array![
-        WESCOT.try_into().unwrap(), // recipient
-        'Test Token', // name
-        8, // decimals
-        1000000, // initial_supply
-        'TT' // symbol
-    ];
+
+    let erc721_contract_address = __deploy_ERC721__();
+
+    let mut erc20_constructor_calldata = array![];
+    USER().serialize(ref erc20_constructor_calldata); // recipient
+    'Test Token'.serialize(ref erc20_constructor_calldata); // name
+    8.serialize(ref erc20_constructor_calldata); // decimals
+    1000000.serialize(ref erc20_constructor_calldata); // initial supply
+    'TT'.serialize(ref erc20_constructor_calldata); // symbol
+
     let (erc20_contract_address, _) = erc20_class_hash.deploy(@erc20_constructor_calldata).unwrap();
 
-    // Deploy SkillNet with token address
+    // Deploy SkillNet with token address and NFT address
     let skillnet_class_hash = declare("SkillNet").unwrap().contract_class();
-    let constructor_calldata = array![erc20_contract_address.into()];
-    let (skillnet_contract_address, _) = skillnet_class_hash.deploy(@constructor_calldata).unwrap();
 
-    (skillnet_contract_address, erc20_contract_address)
+    let mut skillnet_constructor_calldata = array![];
+    erc20_contract_address.serialize(ref skillnet_constructor_calldata);
+    erc721_contract_address.serialize(ref skillnet_constructor_calldata);
+
+    let (skillnet_contract_address, _) = skillnet_class_hash
+        .deploy(@skillnet_constructor_calldata)
+        .unwrap();
+
+    (skillnet_contract_address, erc20_contract_address, erc721_contract_address)
+}
+
+
+fn __deploy_ERC721__() -> ContractAddress {
+    let nft_class_hash = declare("erc721").unwrap().contract_class();
+
+    let mut events_constructor_calldata: Array<felt252> = array![ADMIN];
+    let (nft_contract_address, _) = nft_class_hash.deploy(@events_constructor_calldata).unwrap();
+
+    return (nft_contract_address);
 }
 
 
 #[test]
 fn test_create_course() {
-    let (skillnet_contract_address, _) = __setup__();
+    let (skillnet_contract_address, _, _) = __setup__();
     let skillnet_dispatcher = ISkillNetDispatcher { contract_address: skillnet_contract_address };
 
     start_cheat_caller_address(skillnet_contract_address, BARRETO.try_into().unwrap());
@@ -52,7 +81,7 @@ fn test_create_course() {
 
 #[test]
 fn test_create_should_emit_event_on_success() {
-    let (skillnet_contract_address, _) = __setup__();
+    let (skillnet_contract_address, _, _) = __setup__();
     let skillnet_dispatcher = ISkillNetDispatcher { contract_address: skillnet_contract_address };
 
     let instructor: ContractAddress = BARRETO.try_into().unwrap();
@@ -68,7 +97,7 @@ fn test_create_should_emit_event_on_success() {
 
 #[test]
 fn test_create_certification_success() {
-    let (skillnet_contract_address, _) = __setup__();
+    let (skillnet_contract_address, _, _) = __setup__();
     let skillnet_dispatcher = ISkillNetDispatcher { contract_address: skillnet_contract_address };
     let caller: ContractAddress = BARRETO.try_into().unwrap();
 
@@ -87,7 +116,7 @@ fn test_create_certification_success() {
 
 #[test]
 fn test_enroll_for_course() {
-    let (skillnet_contract_address, erc20_contract_address) = __setup__();
+    let (skillnet_contract_address, erc20_contract_address, _) = __setup__();
     let skillnet_dispatcher = ISkillNetDispatcher { contract_address: skillnet_contract_address };
     let erc20_dispatcher = IERC20Dispatcher { contract_address: erc20_contract_address };
 
@@ -117,3 +146,38 @@ fn test_enroll_for_course() {
     spy.assert_emitted(@array![(skillnet_contract_address, expected_event)]);
     stop_cheat_caller_address(skillnet_contract_address);
 }
+
+#[test]
+fn test_mint_exam_certificate() {
+    let (skillnet_contract_address, _, erc721_contract_address) = __setup__();
+    let skillnet_dispatcher = ISkillNetDispatcher { contract_address: skillnet_contract_address };
+    let erc721_dispatcher = IERC721Dispatcher { contract_address: erc721_contract_address };
+
+    let instructor: ContractAddress = BARRETO.try_into().unwrap();
+    let student: ContractAddress = WESCOT.try_into().unwrap();
+
+    // Create a course first
+    start_cheat_caller_address(skillnet_contract_address, instructor);
+    let certificate_id = skillnet_dispatcher.create_certification("BaseCamp 11", 0);
+    stop_cheat_caller_address(skillnet_contract_address);
+
+    // Enroll student in course
+    start_cheat_caller_address(skillnet_contract_address, student);
+    skillnet_dispatcher.enroll_for_certification(certificate_id);
+
+    // Mint certificate after exam completion
+
+    let mut spy = spy_events();
+    let nft_id = skillnet_dispatcher.mint_exam_certificate(certificate_id);
+    assert(nft_id == 1, 'Certificate not minted');
+
+    // Verify minting event
+    let expected_event = SkillNet::Event::CertificateMinted(
+        SkillNet::CertificateMinted {
+            student: student, certificate_id: certificate_id, minted_nft_id: nft_id,
+        },
+    );
+    spy.assert_emitted(@array![(skillnet_contract_address, expected_event)]);
+    stop_cheat_caller_address(skillnet_contract_address);
+}
+

@@ -20,6 +20,14 @@ pub struct CertificationDetails {
     pub enroll_fee: u256,
 }
 
+#[derive(Drop, Serde, starknet::Store, Clone)]
+pub struct studentsDetails {
+    pub certification_id: u256,
+    pub enrolled: bool,
+    pub passed_exam: bool,
+    pub minted_NFT: u256,
+}
+
 #[derive(Debug, Drop, Serde, starknet::Store, Clone, PartialEq)]
 pub enum ResourceType {
     Free,
