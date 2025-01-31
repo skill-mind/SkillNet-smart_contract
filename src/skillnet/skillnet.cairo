@@ -147,7 +147,45 @@ pub mod SkillNet {
             certification_id
         }
 
-        fn enroll_for_certification(ref self: ContractState, certificate_id: u256, fee: u256) {}
+        fn enroll_for_certification(ref self: ContractState, certificate_id: u256) {
+            // Get certification details and verify certification exists
+            let certification = self.certification_details.read(certificate_id);
+            assert(
+                certification.certification_id == certificate_id, 'Certification does not exist',
+            );
+
+            // Get student and institution addresses
+            let student = get_caller_address();
+            let institution = certification.institution;
+
+            let token = self.token_address.read();
+            let erc20 = IERC20Dispatcher { contract_address: token };
+
+            // Check user's balance
+            let user_balance = erc20.balance_of(student).into();
+            assert(user_balance >= certification.enroll_fee, 'Insufficient balance');
+
+            // Execute payment transfer
+            erc20.transfer_from(student, institution, certification.enroll_fee.try_into().unwrap());
+
+            // Update total enrolled count
+            let new_total = certification.total_enrolled + 1;
+            let certification_name = certification.name.clone();
+            let updated_certification = CertificationDetails {
+                total_enrolled: new_total, ..certification,
+            };
+            self.certification_details.write(certificate_id, updated_certification);
+
+            // Emit enrollment event
+            self
+                .emit(
+                    EnrolledForCertification {
+                        certification_id: certificate_id,
+                        certification: certification_name,
+                        student_address: student,
+                    },
+                );
+        }
 
         fn mint_exam_certificate(ref self: ContractState, certificate_id: u256) {}
 
