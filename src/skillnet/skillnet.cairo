@@ -7,9 +7,11 @@ pub mod SkillNet {
         ContractAddress, get_caller_address,
         storage::{Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePathEntry},
     };
-    use contract::base::types::{CourseDetails, CertificationDetails, ResourceType};
+    use core::starknet::contract_address;
+    use contract::base::types::{CourseDetails, CertificationDetails, ResourceType, studentsDetails};
     use contract::interfaces::ISkillNet::ISkillNet;
     use contract::interfaces::IErc20::{IERC20DispatcherTrait, IERC20Dispatcher};
+    use contract::interfaces::IErc721::{IERC721Dispatcher, IERC721DispatcherTrait};
 
     /// @notice Contract storage structure
     #[storage]
@@ -22,6 +24,10 @@ pub mod SkillNet {
             u256, CertificationDetails,
         >, // map(certification_id, CertificationDetails)
         token_address: ContractAddress,
+        NFT_contract_address: ContractAddress,
+        certification_enrolled_students: Map<
+            (u256, ContractAddress), studentsDetails,
+        > // (certificate_id, student) -> bool
     }
 
     /// @notice Events emitted by the contract
@@ -32,6 +38,7 @@ pub mod SkillNet {
         EnrolledForCourse: EnrolledForCourse,
         NewCertificationCreated: NewCertificationCreated,
         EnrolledForCertification: EnrolledForCertification,
+        CertificateMinted: CertificateMinted,
     }
 
     /// @notice Event emitted when a new course is created
@@ -48,6 +55,13 @@ pub mod SkillNet {
         pub course_id: u256,
         pub course_name: ByteArray,
         pub student_address: ContractAddress,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct CertificateMinted {
+        pub student: ContractAddress,
+        pub certificate_id: u256,
+        pub minted_nft_id: u256,
     }
 
     /// @notice Event emitted when a new certification is created
@@ -69,10 +83,11 @@ pub mod SkillNet {
     /// @notice Initializes the Events contract
     /// @dev Sets the initial event count to 0
     #[constructor]
-    fn constructor(ref self: ContractState, token_address: ContractAddress) {
+    fn constructor(ref self: ContractState, token_address: ContractAddress ,NFT_contract_address: ContractAddress,) {
         self.courses_count.write(0);
         self.certifications_count.write(0);
         self.token_address.write(token_address);
+        self.NFT_contract_address.write(NFT_contract_address);
     }
 
     #[abi(embed_v0)]
@@ -149,13 +164,16 @@ pub mod SkillNet {
 
         fn enroll_for_certification(ref self: ContractState, certificate_id: u256) {
             // Get certification details and verify certification exists
+            let student = get_caller_address();
             let certification = self.certification_details.read(certificate_id);
+            let mut studentData = self
+            .certification_enrolled_students
+            .read((certificate_id, student));
             assert(
                 certification.certification_id == certificate_id, 'Certification does not exist',
             );
 
-            // Get student and institution addresses
-            let student = get_caller_address();
+            // Get student and institution addresses         
             let institution = certification.institution;
 
             let token = self.token_address.read();
@@ -174,7 +192,11 @@ pub mod SkillNet {
             let updated_certification = CertificationDetails {
                 total_enrolled: new_total, ..certification,
             };
+
+            studentData.certification_id = certificate_id;
+            studentData.enrolled = true;
             self.certification_details.write(certificate_id, updated_certification);
+            self.certification_enrolled_students.write((certificate_id, student), studentData);
 
             // Emit enrollment event
             self
@@ -187,7 +209,30 @@ pub mod SkillNet {
                 );
         }
 
-        fn mint_exam_certificate(ref self: ContractState, certificate_id: u256) {}
+        fn mint_exam_certificate(ref self: ContractState, certificate_id: u256) -> u256 {
+            let student = get_caller_address();
+
+            // Check if the student has already minted this certificate
+            let mut studentData = self
+                .certification_enrolled_students
+                .read((certificate_id, student));
+            assert(studentData.certification_id == certificate_id, 'Invalid certificate id');
+            assert(studentData.enrolled, 'student_not_enrolled');
+            // assert(studentData.passed_exam, 'student_not_passed_exam');
+            assert(studentData.minted_NFT == 0, 'Certificate_already_minted');
+
+            // Mint certification NFT
+            let nft_address = self.NFT_contract_address.read();
+            let erc721 = IERC721Dispatcher { contract_address: nft_address };
+            let minted_nft_id = erc721.mint_nft(student);
+
+            // Mark certificate as minted if successful
+            studentData.minted_NFT = minted_nft_id;
+            self.certification_enrolled_students.write((certificate_id, student), studentData);
+
+            self.emit(CertificateMinted { student, certificate_id, minted_nft_id });
+            minted_nft_id
+        }
 
         fn verify_exam_certificate(
             self: @ContractState, certificate_id: u256, student: ContractAddress,
