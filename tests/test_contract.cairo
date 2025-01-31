@@ -117,3 +117,36 @@ fn test_enroll_for_course() {
     spy.assert_emitted(@array![(skillnet_contract_address, expected_event)]);
     stop_cheat_caller_address(skillnet_contract_address);
 }
+
+#[test]
+fn test_enroll_for_certification() {
+    let (skillnet_contract_address, erc20_contract_address) = __setup__();
+    let skillnet_dispatcher = ISkillNetDispatcher { contract_address: skillnet_contract_address };
+    let erc20_dispatcher = IERC20Dispatcher { contract_address: erc20_contract_address };
+
+    // Define institution and student addresses
+    let institution: ContractAddress = BARRETO.try_into().unwrap();
+    let student: ContractAddress = WESCOT.try_into().unwrap();
+
+    // Create certification with fee
+    start_cheat_caller_address(skillnet_contract_address, institution);
+    let certification_id = skillnet_dispatcher.create_certification("Blockchain Developer", 100);
+    stop_cheat_caller_address(skillnet_contract_address);
+
+    // Approve token spending before enrollment
+    start_cheat_caller_address(skillnet_contract_address, student);
+    erc20_dispatcher.approve(skillnet_contract_address, 100);
+
+    // Enroll in certification
+    let mut spy = spy_events();
+    skillnet_dispatcher.enroll_for_certification(certification_id);
+
+    // Verify enrollment event
+    let expected_event = SkillNet::Event::EnrolledForCertification(
+        SkillNet::EnrolledForCertification {
+            certification_id, certification: "Blockchain Developer", student_address: student,
+        },
+    );
+    spy.assert_emitted(@array![(skillnet_contract_address, expected_event)]);
+    stop_cheat_caller_address(skillnet_contract_address);
+}
