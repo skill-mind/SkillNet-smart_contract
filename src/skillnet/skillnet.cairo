@@ -113,35 +113,77 @@ pub mod SkillNet {
             course_id
         }
 
-        fn enroll_for_course(ref self: ContractState, course_id: u256) {
-            // Get course details and verify course exists
-            let course = self.course_details.read(course_id);
-            assert(course.course_id == course_id, 'Course does not exist');
-
-            // Get student and instructor addresses
+       fn enroll_for_certification(ref self: ContractState, certificate_id: u256) {
+            // Get certification details and verify certification exists
             let student = get_caller_address();
-            let instructor = course.instructor;
+            let certification = self.certification_details.read(certificate_id);
+            let mut studentData = self
+                .certification_enrolled_students
+                .read((certificate_id, student));
+            assert(
+                certification.certification_id == certificate_id, 'Certification does not exist',
+            );
+
+            // Get student and institution addresses
+            let institution = certification.institution;
 
             let token = self.token_address.read();
             let erc20 = IERC20Dispatcher { contract_address: token };
 
             // Check user's balance
             let user_balance = erc20.balance_of(student).into();
-            assert(user_balance >= course.enroll_fee, 'Insufficient balance');
+            assert(user_balance >= certification.enroll_fee, 'Insufficient balance');
 
             // Execute payment transfer
-            erc20.transfer_from(student, instructor, course.enroll_fee.try_into().unwrap());
+            erc20.transfer_from(student, institution, certification.enroll_fee.try_into().unwrap());
 
             // Update total enrolled count
-            let new_total = course.total_enrolled + 1;
-            let course_name = course.name.clone();
-            let updated_course = CourseDetails { total_enrolled: new_total, ..course };
-            self.course_details.write(course_id, updated_course);
+            let new_total = certification.total_enrolled + 1;
+            let certification_name = certification.name.clone();
+            let updated_certification = CertificationDetails {
+                total_enrolled: new_total, ..certification,
+            };
 
-            self.emit(EnrolledForCourse { course_id, course_name, student_address: student });
+            studentData.certification_id = certificate_id;
+            studentData.enrolled = true;
+            self.certification_details.write(certificate_id, updated_certification);
+            self.certification_enrolled_students.write((certificate_id, student), studentData);
+
+            // Emit enrollment event
+            self
+                .emit(
+                    EnrolledForCertification {
+                        certification_id: certificate_id,
+                        certification: certification_name,
+                        student_address: student,
+                    },
+                );
         }
 
-        fn mint_course_certificate(ref self: ContractState, course_id: u256) {}
+        fn mint_exam_certificate(ref self: ContractState, certificate_id: u256) -> u256 {
+            let student = get_caller_address();
+
+            // Check if the student has already minted this certificate
+            let mut studentData = self
+                .certification_enrolled_students
+                .read((certificate_id, student));
+            assert(studentData.certification_id == certificate_id, 'Invalid certificate id');
+            assert(studentData.enrolled, 'student_not_enrolled');
+            // assert(studentData.passed_exam, 'student_not_passed_exam');
+            assert(studentData.minted_NFT == 0, 'Certificate_already_minted');
+
+            // Mint certification NFT
+            let nft_address = self.NFT_contract_address.read();
+            let erc721 = IERC721Dispatcher { contract_address: nft_address };
+            let minted_nft_id = erc721.mint_nft(student);
+
+            // Mark certificate as minted if successful
+            studentData.minted_NFT = minted_nft_id;
+            self.certification_enrolled_students.write((certificate_id, student), studentData);
+
+            self.emit(CertificateMinted { student, certificate_id, minted_nft_id });
+            minted_nft_id
+        }
 
         fn verify_course_credential(
             self: @ContractState, course_id: u256, student: ContractAddress,
@@ -168,6 +210,43 @@ pub mod SkillNet {
         }
 
         fn enroll_for_certification(ref self: ContractState, certificate_id: u256) {
+         // Get certification details and verify certification exists
+            let certification = self.certification_details.read(certificate_id);
+            assert(
+                certification.certification_id == certificate_id, 'Certification does not exist',
+            );
+
+            // Get student and institution addresses
+            let student = get_caller_address();
+            let institution = certification.institution;
+
+            let token = self.token_address.read();
+            let erc20 = IERC20Dispatcher { contract_address: token };
+
+            // Check user's balance
+            let user_balance = erc20.balance_of(student).into();
+            assert(user_balance >= certification.enroll_fee, 'Insufficient balance');
+
+            // Execute payment transfer
+            erc20.transfer_from(student, institution, certification.enroll_fee.try_into().unwrap());
+
+            // Update total enrolled count
+            let new_total = certification.total_enrolled + 1;
+            let certification_name = certification.name.clone();
+            let updated_certification = CertificationDetails {
+                total_enrolled: new_total, ..certification,
+            };
+            self.certification_details.write(certificate_id, updated_certification);
+
+            // Emit enrollment event
+            self
+                .emit(
+                    EnrolledForCertification {
+                        certification_id: certificate_id,
+                        certification: certification_name,
+                        student_address: student,
+                    },
+                );
           
         }
 
