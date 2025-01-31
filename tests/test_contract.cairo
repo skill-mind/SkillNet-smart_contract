@@ -144,9 +144,7 @@ fn test_enroll_for_certification() {
     // Verify enrollment event
     let expected_event = SkillNet::Event::EnrolledForCertification(
         SkillNet::EnrolledForCertification {
-            certification_id,
-            certification: "Blockchain Developer",
-            student_address: student,
+            certification_id, certification: "Blockchain Developer", student_address: student,
         },
     );
     spy.assert_emitted(@array![(skillnet_contract_address, expected_event)]);
