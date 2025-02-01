@@ -25,3 +25,11 @@ pub enum ResourceType {
     Free,
     Paid,
 }
+
+#[derive(Drop, Serde, starknet::Store, Clone)]
+pub struct StudentCourseData {
+    pub enrollment_id: u256,
+    pub enrolled: bool,
+    pub completed: bool,
+    pub token_id: u256,
+}
