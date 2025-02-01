@@ -16,5 +16,6 @@ pub trait IERC721<TContractState> {
     fn transfer_from(
         ref self: TContractState, from: ContractAddress, to: ContractAddress, token_id: u256,
     );
-    fn mint(ref self: TContractState, to: ContractAddress, token_id: u256);
+    fn set_token_uri(ref self: ContractState, token_id: u256, token_uri: felt252);
+    fn mint(ref self: TContractState, to: ContractAddress, token_id: u256) -> u256;
 }
